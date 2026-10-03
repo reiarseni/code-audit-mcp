@@ -1,0 +1,282 @@
+# Own semgrep rules for Laravel/PHP, Python (FastAPI/Flask), TypeScript/React, Flutter, Postgres and Redis.
+# They cover what the public registry packs do not detect in these stacks.
+rules:
+  # ------------------------------------------------------------------ Postgres / SQL
+  - id: laravel-raw-sql-interpolation
+    languages: [php]
+    severity: WARNING
+    message: >-
+      SQL built with interpolation or concatenation in a raw Laravel query: possible SQL injection if any interpolated part comes from the user.
+      Use bindings (`DB::select('... where id = ?', [$id])`, `whereRaw('email = ?', [$email])`).
+    metadata: {category: sql-injection, cwe: "CWE-89"}
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: DB::$M($A . $B, ...)
+              - pattern: $Q->$M($A . $B, ...)
+              - pattern: $C::$M($A . $B, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(raw|select|selectOne|scalar|statement|unprepared|insert|update|delete|cursor|whereRaw|orWhereRaw|selectRaw|orderByRaw|havingRaw|orHavingRaw|groupByRaw|fromRaw)$
+      - patterns:
+          - pattern-either:
+              - pattern: DB::$M($SQL, ...)
+              - pattern: $Q->$M($SQL, ...)
+              - pattern: $C::$M($SQL, ...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(raw|select|selectOne|scalar|statement|unprepared|insert|update|delete|cursor|whereRaw|orWhereRaw|selectRaw|orderByRaw|havingRaw|orHavingRaw|groupByRaw|fromRaw)$
+          - metavariable-regex:
+              metavariable: $SQL
+              regex: ^"[^"]*(\$[A-Za-z_]|\{\$)
+
+  - id: python-sql-string-building
+    languages: [python]
+    severity: WARNING
+    message: >-
+      SQL built with an f-string, `%`, `.format()` or concatenation and passed to execute(): possible SQL injection if any interpolated part comes from the user.
+      Use parameters (`cur.execute("... WHERE id = %s", (id,))` or `text("... :id")` with bindparams).
+    metadata: {category: sql-injection, cwe: "CWE-89"}
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: $DB.$EXEC(f"...", ...)
+              - pattern: $DB.$EXEC("..." % $ARGS, ...)
+              - pattern: $DB.$EXEC("...".format(...), ...)
+              - pattern: $DB.$EXEC("..." + $X, ...)
+              - pattern: $DB.$EXEC($X + "...", ...)
+          - metavariable-regex:
+              metavariable: $EXEC
+              regex: ^(execute|executemany|exec_driver_sql|fetch|fetchrow|fetchval|mogrify|raw)$
+      - pattern: text(f"...")
+      - pattern: text("..." % $ARGS)
+      - pattern: text("...".format(...))
+      - pattern: sqlalchemy.text(f"...")
+  - id: js-sql-template-interpolation
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      SQL built with an interpolated template literal or concatenation: possible SQL injection if any interpolated part comes from the user.
+      Use parameters (`pool.query('... WHERE id = $1', [id])`) or the driver/ORM tagged template.
+    metadata: {category: sql-injection, cwe: "CWE-89"}
+    patterns:
+      - pattern-either:
+          - pattern: $DB.$M(`...${$X}...`, ...)
+          - pattern: $DB.$M("..." + $X, ...)
+          - pattern: $DB.$M($X + "...", ...)
+      - metavariable-regex:
+          metavariable: $M
+          regex: ^(query|execute|raw|unsafe|\$queryRawUnsafe|\$executeRawUnsafe|whereRaw|orderByRaw)$
+
+  - id: hardcoded-database-url-credentials
+    languages: [generic]
+    severity: WARNING
+    message: >-
+      Postgres/MySQL/Redis URL with a password hardcoded in the code. Move it to environment variables.
+    metadata: {category: secrets, cwe: "CWE-798"}
+    paths:
+      include: ["*.py", "*.php", "*.ts", "*.tsx", "*.js", "*.jsx", "*.mjs", "*.cjs", "*.dart"]
+    pattern-regex: (?i)\b(postgres(?:ql)?|mysql|mariadb|rediss?)(?:\+\w+)?://[^:@\s'"/]*:(?![^@\s'"]*(?:\$\{|\{|%s|\$|\*\*\*|<))[^@\s'"]{3,}@
+
+  # ------------------------------------------------------------------ Redis
+  - id: redis-keys-command
+    languages: [python]
+    severity: WARNING
+    message: >-
+      KEYS walks the whole keyspace and blocks Redis; use SCAN in production (`scan_iter`).
+    metadata: {category: performance}
+    pattern-either:
+      - pattern: $R.keys("...")
+      - pattern: $R.keys(f"...")
+
+  - id: redis-keys-command-js
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      KEYS walks the whole keyspace and blocks Redis; use SCAN in production (`scanStream`, `scanIterator`).
+    metadata: {category: performance}
+    pattern-either:
+      - pattern: $R.keys("...")
+      - pattern: $R.keys(`...`)
+  - id: redis-keys-command-php
+    languages: [php]
+    severity: WARNING
+    message: >-
+      KEYS walks the whole keyspace and blocks Redis; use SCAN in production.
+    metadata: {category: performance}
+    pattern-either:
+      - pattern: Redis::keys(...)
+      - pattern: $R->keys($PATTERN)
+      - pattern: Redis::command("keys", ...)
+      - pattern: $R->command("keys", ...)
+
+  - id: redis-flush-in-code
+    languages: [python, typescript, javascript]
+    severity: WARNING
+    message: >-
+      FLUSHALL/FLUSHDB wipes the whole Redis database (cache, queues, sessions). It should not be in application code.
+    metadata: {category: data-loss}
+    pattern-either:
+      - pattern: $R.flushall(...)
+      - pattern: $R.flushdb(...)
+      - pattern: $R.flushAll(...)
+      - pattern: $R.flushDb(...)
+
+  - id: redis-flush-in-code-php
+    languages: [php]
+    severity: WARNING
+    message: >-
+      FLUSHALL/FLUSHDB wipes the whole Redis database (cache, queues, sessions). It should not be in application code.
+    metadata: {category: data-loss}
+    pattern-either:
+      - pattern: Redis::flushall(...)
+      - pattern: Redis::flushdb(...)
+      - pattern: $R->flushall(...)
+      - pattern: $R->flushdb(...)
+      - pattern: $R->flushAll(...)
+      - pattern: $R->flushDB(...)
+  # ------------------------------------------------------------------ Laravel
+  - id: laravel-env-outside-config
+    languages: [php]
+    severity: WARNING
+    message: >-
+      env() outside config/: it returns null once `php artisan config:cache` runs. Read the value with config('...').
+    metadata: {category: correctness}
+    paths:
+      exclude: ["config/", "tests/", "bootstrap/", "*.blade.php"]
+    pattern: env(...)
+
+  - id: laravel-guarded-empty
+    languages: [generic]
+    severity: WARNING
+    message: >-
+      `$guarded = []` disables mass-assignment protection: any request field can be written.
+      Declare `$fillable` explicitly.
+    metadata: {category: mass-assignment, cwe: "CWE-915"}
+    paths:
+      include: ["*.php"]
+    pattern-regex: protected\s+(?:array\s+)?\$guarded\s*=\s*\[\s*\]
+  - id: blade-unescaped-output
+    languages: [generic]
+    severity: WARNING
+    message: >-
+      `{!! !!}` prints without escaping: possible XSS if the content comes from the user. Use `{{ }}` or sanitize the HTML.
+    metadata: {category: xss, cwe: "CWE-79"}
+    paths:
+      include: ["*.blade.php"]
+    pattern-regex: \{!!\s*[^!]*?\s*!!\}
+
+  - id: php-eval
+    languages: [php]
+    severity: ERROR
+    message: eval() executes arbitrary code.
+    metadata: {category: code-injection, cwe: "CWE-95"}
+    pattern: eval(...)
+
+  # ------------------------------------------------------------------ FastAPI / Flask
+  - id: flask-debug-enabled
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Flask with debug=True exposes the Werkzeug debugger (remote code execution). Disable it outside development.
+    metadata: {category: misconfiguration, cwe: "CWE-489"}
+    pattern: $APP.run(..., debug=True, ...)
+
+  - id: cors-wildcard-with-credentials
+    languages: [python]
+    severity: ERROR
+    message: >-
+      CORS with `allow_origins=["*"]` and `allow_credentials=True`: any origin can make authenticated requests
+      (or the browser rejects them). List the allowed origins explicitly.
+    metadata: {category: misconfiguration, cwe: "CWE-942"}
+    pattern: $APP.add_middleware(CORSMiddleware, ..., allow_origins=["*"], ..., allow_credentials=True, ...)
+
+  - id: hardcoded-secret-key
+    languages: [python]
+    severity: ERROR
+    message: SECRET_KEY hardcoded in the code; read it from an environment variable.
+    metadata: {category: secrets, cwe: "CWE-798"}
+    pattern-either:
+      - pattern: $APP.config["SECRET_KEY"] = "..."
+      - pattern: $APP.secret_key = "..."
+      - pattern: SECRET_KEY = "..."
+      - pattern: JWT_SECRET_KEY = "..."
+
+  # ------------------------------------------------------------------ React
+  - id: react-dangerously-set-inner-html
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      dangerouslySetInnerHTML inserts unescaped HTML: possible XSS. Sanitize with DOMPurify or avoid raw HTML.
+    metadata: {category: xss, cwe: "CWE-79"}
+    pattern: <$EL dangerouslySetInnerHTML={...} />
+
+  - id: token-in-localstorage
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: >-
+      Session token in localStorage: readable by any injected script (XSS). Prefer httpOnly cookies.
+    metadata: {category: session, cwe: "CWE-922"}
+    patterns:
+      - pattern: localStorage.setItem($KEY, ...)
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i).*(token|jwt|auth|session).*
+
+  # ------------------------------------------------------------------ Flutter / Android / iOS
+  - id: flutter-tls-verification-disabled
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      badCertificateCallback returning true accepts any certificate: anyone on the network can intercept
+      the traffic (man-in-the-middle). Remove it or validate the certificate (certificate pinning).
+    metadata: {category: tls, cwe: "CWE-295"}
+    paths:
+      include: ["*.dart"]
+    pattern-regex: badCertificateCallback\s*=\s*\([^)]*\)\s*(?:=>\s*true\b|\{\s*return\s+true\s*;)
+
+  - id: flutter-secret-in-shared-preferences
+    languages: [generic]
+    severity: WARNING
+    message: >-
+      SharedPreferences stores plain text (XML/plist readable with root or in backups). For tokens and
+      passwords use flutter_secure_storage (Keychain/Keystore).
+    metadata: {category: session, cwe: "CWE-922"}
+    paths:
+      include: ["*.dart"]
+    pattern-regex: \.setString\(\s*['"][^'"]*(?i:token|jwt|password|passwd|secret|auth|session)[^'"]*['"]
+
+  - id: android-cleartext-traffic
+    languages: [generic]
+    severity: WARNING
+    message: >-
+      usesCleartextTraffic="true" allows unencrypted HTTP in the production app. Remove it or restrict it to specific
+      domains with network_security_config.xml (only in the debug manifest if it is for development).
+    metadata: {category: tls, cwe: "CWE-319"}
+    paths:
+      include: ["AndroidManifest.xml"]
+      exclude: ["src/debug/", "src/profile/"]
+    pattern-regex: android:usesCleartextTraffic\s*=\s*"true"
+
+  - id: android-debuggable
+    languages: [generic]
+    severity: ERROR
+    message: >-
+      android:debuggable="true" in the manifest: anyone with the APK can attach a debugger and read memory
+      and data. Gradle already enables it only in debug builds; remove it from the manifest.
+    metadata: {category: configuration, cwe: "CWE-489"}
+    paths:
+      include: ["AndroidManifest.xml"]
+      exclude: ["src/debug/", "src/profile/"]
+    pattern-regex: android:debuggable\s*=\s*"true"
+
+  - id: ios-arbitrary-loads
+    languages: [generic]
+    severity: WARNING
+    message: >-
+      NSAllowsArbitraryLoads disables App Transport Security: the app accepts unencrypted HTTP to any domain.
+      Use per-domain exceptions (NSExceptionDomains) if it is really needed.
+    metadata: {category: tls, cwe: "CWE-319"}
+    paths:
+      include: ["Info.plist"]
+    pattern-regex: <key>NSAllowsArbitraryLoads</key>\s*<true\s*/>

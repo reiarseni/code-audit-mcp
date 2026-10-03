@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="app"
+        android:usesCleartextTraffic="true"  <!-- BAD:android-cleartext-traffic -->
+        android:debuggable="true"  <!-- BAD:android-debuggable -->
+        android:allowBackup="false">
+    </application>
+</manifest>
