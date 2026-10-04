@@ -1,0 +1,6 @@
+#!/bin/sh
+# MCP server launcher for any harness. uv manages an ephemeral environment with `mcp`;
+# the audit tools run through uvx, without touching the audited project's venv.
+# Usage in the harness MCP config: command = <absolute path to this script>
+DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+exec uv run --quiet --project "$DIR" --frozen python -m code_audit_mcp.server "$@"
