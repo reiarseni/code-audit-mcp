@@ -184,7 +184,8 @@ The own semgrep rules are tested against `tests/fixtures/rules`, where every lin
 ## Contributing
 
 Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Security reports go through
-[SECURITY.md](SECURITY.md). Release notes live in [CHANGELOG.md](CHANGELOG.md). Licensed under the [MIT License](LICENSE).
+[SECURITY.md](SECURITY.md). Release notes live in [CHANGELOG.md](CHANGELOG.md) and planned work in
+[ROADMAP.md](ROADMAP.md). Licensed under the [MIT License](LICENSE).
 
 ---
 
