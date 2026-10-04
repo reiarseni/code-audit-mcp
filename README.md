@@ -1,5 +1,9 @@
 # code-audit-mcp
 
+[![CI](https://github.com/reiarseni/code-audit-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/reiarseni/code-audit-mcp/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+
 **Audit your whole stack with a single question to your agent.**
 
 An MCP server (stdio) that gives Claude Code (and any MCP-compatible agent) a complete audit of your project: dead
@@ -176,6 +180,11 @@ Layout: `core.py` (processes, cache, finding format), `detect.py` (stacks), `con
 `engines/{python,php,node,dart,shared}.py`, `checks.py` (which engine resolves each check), `server.py`.
 The own semgrep rules are tested against `tests/fixtures/rules`, where every line that must be detected carries
 `BAD:<rule>`.
+
+## Contributing
+
+Issues and pull requests are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). Security reports go through
+[SECURITY.md](SECURITY.md). Release notes live in [CHANGELOG.md](CHANGELOG.md). Licensed under the [MIT License](LICENSE).
 
 ---
 
