@@ -22,7 +22,7 @@ classifiers = [
     "Topic :: Security",
     "Topic :: Software Development :: Quality Assurance",
 ]
-dependencies = ["mcp>=1.9,<2"]
+dependencies = ["mcp>=1.9,<3"]
 
 [project.urls]
 Homepage = "https://github.com/reiarseni/code-audit-mcp"
